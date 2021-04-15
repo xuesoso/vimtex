@@ -607,6 +607,7 @@ function! vimtex#syntax#core#init_highlights() abort " {{{1
   highlight def link texNewenvParm         texParm
   highlight def link texOptEqual           texSymbol
   highlight def link texPartConcealed      texCmdPart
+  highlight def link texPartConcArgTitle   texPartArgTitle
   highlight def link texRefOpt             texOpt
   highlight def link texRefConcealedOpt1   texRefOpt
   highlight def link texRefConcealedOpt2   texRefOpt
@@ -1621,12 +1622,12 @@ endfunction
 
 " }}}1
 function! s:match_conceal_sections() abort " {{{1
-  syntax match texCmdPart "\v\\%(sub)*section>\*?" contains=texPartConcealed nextgroup=texPartArgTitle
+  syntax match texCmdPart "\v\\%(sub)*section>\*?" contains=texPartConcealed nextgroup=texPartConcArgTitle
   syntax match texPartConcealed "\\" contained conceal cchar=#
   syntax match texPartConcealed "sub" contained conceal cchar=#
-  syntax match texPartConcealed "section" contained conceal cchar= 
+  syntax match texPartConcealed "section\*\?" contained conceal cchar= 
 
-  call vimtex#syntax#core#new_arg('texPartArgTitle', {
+  call vimtex#syntax#core#new_arg('texPartConcArgTitle', {
         \ 'opts': 'contained keepend concealends'
         \})
 endfunction
