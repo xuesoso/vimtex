@@ -26,7 +26,7 @@ function! vimtex#kpsewhich#find(file) abort " {{{1
   endtry
 
   " Perform search -> [result, result_root]
-  let l:result = get(vimtex#kpsewhich#run(fnameescape(a:file)), 0, '')
+  let l:result = get(vimtex#kpsewhich#run(vimtex#util#shellescape(a:file)), 0, '')
   if !vimtex#paths#is_abs(l:result)
     let l:result = empty(l:result) ? '' : simplify(l:root . '/' . l:result)
     call add(l:current, [l:result, l:root])

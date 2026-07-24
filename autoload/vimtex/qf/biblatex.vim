@@ -92,7 +92,7 @@ function! s:qf.get_db_files() abort dict " {{{1
       elseif filereadable(expand(l:file))
         let self.db_files += [expand(l:file)]
       else
-        let l:cand = vimtex#kpsewhich#run(l:file)
+        let l:cand = vimtex#kpsewhich#run(vimtex#util#shellescape(l:file))
         if len(l:cand) == 1
           let self.db_files += [l:cand[0]]
         endif

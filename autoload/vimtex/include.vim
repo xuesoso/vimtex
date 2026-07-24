@@ -134,7 +134,7 @@ function! s:search_candidates_kpsewhich(fname) abort " {{{1
   endfor
 
   for l:file in l:candidates
-    let l:candidate = get(vimtex#kpsewhich#run(fnameescape(l:file)), 0, '')
+    let l:candidate = get(vimtex#kpsewhich#run(vimtex#util#shellescape(l:file)), 0, '')
     if !empty(l:candidate) && filereadable(l:candidate) | return l:candidate | endif
   endfor
 

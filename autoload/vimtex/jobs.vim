@@ -26,8 +26,13 @@ function! vimtex#jobs#start(cmd, ...) abort " {{{1
   let l:job.detached = get(l:opts, 'detached', v:false)
   call l:job.start()
 
-  " Add some minor delay to ensure the job was properly started
-  sleep 100m
+  " Optionally add a minor delay to ensure the job was properly started. This
+  " is opt-in (via the "startup_delay" option, in milliseconds) because an
+  " unconditional delay adds latency to every single job startup.
+  let l:delay = str2nr(get(l:opts, 'startup_delay', 0))
+  if l:delay > 0
+    execute 'sleep' l:delay . 'm'
+  endif
 
   return l:job
 endfunction

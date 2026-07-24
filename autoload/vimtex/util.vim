@@ -497,13 +497,16 @@ endfunction
 
 " }}}1
 function! vimtex#util#www(url) abort " {{{1
+  " NOTE: The URL is shell escaped to avoid command injection, e.g. through
+  " untrusted bibliography "url"/"doi" fields. On Windows, "start" interprets a
+  " quoted first argument as the window title, so an empty title is prepended.
   let l:cmd = get(#{
         \ linux: 'xdg-open',
         \ mac: 'open',
-        \ win: 'start',
+        \ win: 'start ""',
         \}, vimtex#util#get_os())
 
-  call vimtex#jobs#start(l:cmd .. ' ' .. a:url)
+  call vimtex#jobs#start(l:cmd .. ' ' .. vimtex#util#shellescape(a:url))
 endfunction
 
 " }}}1
