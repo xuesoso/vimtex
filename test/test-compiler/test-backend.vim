@@ -7,10 +7,6 @@ set nomore
 let g:vimtex_view_automatic = 0
 let g:vimtex_log_verbose = 0
 
-if has('nvim')
-  let g:vimtex_compiler_progname = 'nvr'
-endif
-
 function! RunTests(comp, list_opts)
   if !executable(a:comp)
     echo 'Warning! "' . a:comp . '" was not executable!'
@@ -70,7 +66,7 @@ function! RunTests(comp, list_opts)
     endif
 
     " Check that the PDF has been built
-    if empty(b:vimtex.out())
+    if empty(b:vimtex.compiler.get_file('pdf'))
       echo "PDF was not built properly\n"
       cquit
     endif
@@ -78,13 +74,14 @@ function! RunTests(comp, list_opts)
     silent call vimtex#compiler#clean(1)
     sleep 650m
 
-    if !empty(b:vimtex.out()) || !empty(b:vimtex.aux())
+    if !empty(b:vimtex.compiler.get_file('pdf'))
+          \ || !empty(b:vimtex.compiler.get_file('aux'))
       echo "VimtexClean failed!\n"
       cquit
     endif
 
-    if !empty(get(l:opts, 'build_dir', ''))
-      call delete(l:opts.build_dir, 'rf')
+    if !empty(get(l:opts, 'out_dir', ''))
+      call delete(l:opts.out_dir, 'rf')
     endif
 
     echo "\n"
@@ -95,14 +92,14 @@ endfunction
 for [s:comp, s:opts] in items({
       \ 'latexmk' : [
       \   {},
-      \   {'build_dir' : 'out'},
+      \   {'out_dir' : 'out'},
       \   {'callback' : 0},
       \   {'callback' : 0, 'continuous' : 0},
       \   {'continuous' : 0},
       \ ],
       \ 'latexrun' : [
       \   {},
-      \   {'build_dir' : 'out'},
+      \   {'out_dir' : 'out'},
       \ ],
       \})
   call RunTests(s:comp, s:opts)

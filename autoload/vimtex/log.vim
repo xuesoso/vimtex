@@ -40,13 +40,7 @@ endfunction
 
 " }}}1
 function! vimtex#log#toggle_verbose() abort " {{{1
-  if s:logger.verbose
-    let s:logger.verbose = 0
-    call vimtex#log#info('Logging is now quiet')
-  else
-    call vimtex#log#info('Logging is now verbose')
-    let s:logger.verbose = 1
-  endif
+  let s:logger.verbose = !s:logger.verbose
 endfunction
 
 " }}}1
@@ -92,8 +86,11 @@ function! s:logger.add(msg_arg, type) abort dict " {{{1
   let l:entry = {}
   let l:entry.type = a:type
   let l:entry.time = strftime('%T')
-  let l:entry.callstack = vimtex#debug#stacktrace()[1:]
   let l:entry.msg = l:msg_list
+  let l:entry.callstack = vimtex#debug#stacktrace()[2:]
+  for l:level in l:entry.callstack
+    let l:level.nr -= 2
+  endfor
   call add(self.entries, l:entry)
 
   if self.verbose
@@ -111,15 +108,18 @@ function! s:logger.notify(msg_list, type) abort dict " {{{1
     if join(a:msg_list) =~# l:re | return | endif
   endfor
 
-  call vimtex#echo#formatted([
+  call vimtex#ui#echo([
         \ [self.type_to_highlight[a:type], 'VimTeX:'],
         \ ' ' . a:msg_list[0]
         \])
 
-  if len(a:msg_list) > 1
-    call vimtex#echo#echo(
-          \ join(map(a:msg_list[1:], "'        ' . v:val"), "\n"))
-  endif
+  " if len(a:msg_list) > 1
+  "   call vimtex#ui#echo(
+  "         \ join(map(a:msg_list[1:], "'        ' . v:val"), "\n"))
+  " endif
+  for l:msg in a:msg_list[1:]
+    call vimtex#ui#echo(l:msg, {'indent': 8})
+  endfor
 endfunction
 
 " }}}1

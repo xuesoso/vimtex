@@ -1,4 +1,5 @@
 \documentclass{minimal}
+\newcommand\mygls\gls
 
 \begin{document}
 
@@ -13,5 +14,22 @@ $\mathcmdb{concealed}$
 $\R -> ℝ$
 $\E -> 𝔼$
 $\P -> ℙ$
+$\mathnote{$Math$ + text}$
+$\mathnoteC{$Math$ + text concealed}$
+$\text{$Math$ + text reference}$
+
+\undline{underlined}
+
+\gls{spellingerror}
+\mygls{spellingerror}{spellingerror}
+\slurp{spellingerror}{spellingerror}{spellingerror}
+
+% regex cmd name
+\Ac*{arg}
+\iacsp{arg}
+
+$\mather{some text}$
+
+$\mathcmda ffa$
 
 \end{document}

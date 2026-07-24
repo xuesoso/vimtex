@@ -14,7 +14,7 @@ function! s:get_textidote_lang(lang) " {{{1
   let l:matched = matchlist(a:lang, '^\v(\a\a)%(_(\a\a))?')
   let l:string = l:matched[1]
   if !empty(l:matched[2])
-    let l:string .= toupper(l:matched[2])
+    let l:string .= '_' . toupper(l:matched[2])
   endif
   return l:string
 endfunction
@@ -31,17 +31,16 @@ if empty(s:cfg.jar) || !filereadable(fnamemodify(s:cfg.jar, ':p'))
   finish
 endif
 
-let s:language = vimtex#ui#choose(split(&spelllang, ','), {
+let s:language = vimtex#ui#select(split(&spelllang, ','), {
       \ 'prompt': 'Multiple spelllang languages detected, please select one:',
-      \ 'abort': v:false,
+      \ 'force_choice': v:true,
       \})
 let &l:makeprg = 'java -jar ' . shellescape(fnamemodify(s:cfg.jar, ':p'))
       \ . (has_key(s:cfg, 'args') ? ' ' . s:cfg.args : '')
       \ . ' --no-color --output singleline --check '
       \ . s:get_textidote_lang(s:language) . ' %:S'
 
-setlocal errorformat=
-setlocal errorformat+=%f(L%lC%c-L%\\d%\\+C%\\d%\\+):\ %m
+setlocal errorformat=%f(L%lC%c-L%\\d%\\+C%\\d%\\+):\ %m
 setlocal errorformat+=%-G%.%#
 
 silent CompilerSet makeprg

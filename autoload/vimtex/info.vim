@@ -37,8 +37,9 @@ endfunction
 " }}}1
 function! s:info.gather_system_info() abort dict " {{{1
   let l:lines = [
-        \ 'System info',
+        \ 'System info:',
         \ '  OS: ' . s:get_os_info(),
+        \ '  LaTeX version: ' . s:get_latex_info(),
         \ '  Vim version: ' . s:get_vim_info(),
         \]
 
@@ -49,6 +50,11 @@ function! s:info.gather_system_info() abort dict " {{{1
   else
     call add(l:lines, '  Has clientserver: false')
   endif
+
+  call add(l:lines, '  $PATH:')
+  for l:path in uniq(sort(split($PATH, '[:;]')))
+    call add(l:lines, '    - ' .. l:path)
+  endfor
 
   return l:lines
 endfunction
@@ -182,23 +188,38 @@ function! s:get_os_info() abort " {{{1
 
   if l:os ==# 'linux'
     let l:result = executable('lsb_release')
-          \ ? system('lsb_release -d')[12:-2]
-          \ : system('uname -sr')[:-2]
+        \ ? vimtex#jobs#cached('lsb_release -d')[0][12:]
+        \ : vimtex#jobs#cached('uname -sr')[0]
     return substitute(l:result, '^\s*', '', '')
   elseif l:os ==# 'mac'
-    let l:name = system('sw_vers -productName')[:-2]
-    let l:version = system('sw_vers -productVersion')[:-2]
-    let l:build = system('sw_vers -buildVersion')[:-2]
-    return l:name . ' ' . l:version . ' (' . l:build . ')'
-  else
-    if !exists('s:win_info')
-      let s:win_info = vimtex#process#capture('systeminfo')
+    if executable('sw_vers')
+      let l:name = vimtex#jobs#cached('sw_vers -productName')[0]
+      let l:version = vimtex#jobs#cached('sw_vers -productVersion')[0]
+      let l:build = vimtex#jobs#cached('sw_vers -buildVersion')[0]
+      return l:name . ' ' . l:version . ' (' . l:build . ')'
+    else
+      return 'MacOS/i[Pad]OS'
     endif
+  else
+    let l:win_info = vimtex#jobs#cached('systeminfo')
 
-    let l:name = matchstr(s:win_info[1], ':\s*\zs.*')
-    let l:version = matchstr(s:win_info[2], ':\s*\zs.*')
-    return l:name . ' (' . l:version . ')'
+    try
+      let l:name = trim(matchstr(l:win_info[1], ':\s*\zs.*'))
+      let l:version = trim(matchstr(l:win_info[2], ':\s*\zs.*'))
+      return l:name . ' (' . l:version . ')'
+    catch
+      return 'Windows (' . string(l:win_info) . ')'
+    endtry
   endif
+endfunction
+
+" }}}1
+function! s:get_latex_info() abort " {{{1
+  let l:result = executable('latex')
+      \ ? vimtex#jobs#capture('latex --version')[0]
+      \ : 'LATEX WAS NOT FOUND!'
+
+  return l:result
 endfunction
 
 " }}}1

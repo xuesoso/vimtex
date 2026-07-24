@@ -10,9 +10,9 @@ function! vimtex#text_obj#init_buffer() abort " {{{1
   " Note: I've permitted myself long lines here to make this more readable.
   for [l:map, l:name, l:opt] in [
         \ ['c', 'commands', ''],
-        \ ['d', 'delimited', 'delim_all'],
-        \ ['e', 'delimited', 'env_tex'],
-        \ ['$', 'delimited', 'env_math'],
+        \ ['d', 'delimited', 'delims'],
+        \ ['e', 'delimited', 'normal'],
+        \ ['$', 'delimited', 'math'],
         \ ['P', 'sections', ''],
         \ ['m', 'items', ''],
         \]
@@ -106,8 +106,11 @@ function! vimtex#text_obj#delimited(is_inner, mode, type) abort " {{{1
   let l:pos_save = vimtex#pos#get_cursor()
   let l:startpos = getpos("'>")
 
+  " We ignore counts for i$ and a$
+  let l:count1 = a:type ==# 'math' ? 1 : v:count1
+
   " Get the delimited text object positions
-  for l:count in range(v:count1)
+  for l:count in range(l:count1)
     if !empty(l:object)
       let l:pos_next = vimtex#pos#prev(
             \ a:is_inner ? l:object.open : l:object.pos_start)
@@ -122,7 +125,7 @@ function! vimtex#text_obj#delimited(is_inner, mode, type) abort " {{{1
     if a:mode
       let l:object = s:get_sel_delimited_visual(a:is_inner, a:type, l:startpos)
     else
-      let [l:open, l:close] = vimtex#delim#get_surrounding(a:type)
+      let [l:open, l:close] = s:get_surrounding_or_next(a:type)
       let l:object = empty(l:open)
             \ ? {} : s:get_sel_delimited(l:open, l:close, a:is_inner)
     endif
@@ -163,6 +166,10 @@ function! vimtex#text_obj#delimited(is_inner, mode, type) abort " {{{1
   call vimtex#pos#set_cursor(l:object.pos_start)
   normal! o
   call vimtex#pos#set_cursor(l:object.pos_end)
+
+  if &selection ==# 'exclusive'
+    normal! l
+  endif
 endfunction
 
 " }}}1
@@ -234,7 +241,7 @@ endfunction
 function! s:get_sel_delimited_visual(is_inner, type, startpos) abort " {{{1
   if a:is_inner
     call vimtex#pos#set_cursor(vimtex#pos#next(a:startpos))
-    let [l:open, l:close] = vimtex#delim#get_surrounding(a:type)
+    let [l:open, l:close] = s:get_surrounding(a:type)
     if !empty(l:open)
       let l:object = s:get_sel_delimited(l:open, l:close, a:is_inner)
 
@@ -246,7 +253,7 @@ function! s:get_sel_delimited_visual(is_inner, type, startpos) abort " {{{1
           \     && getpos("'<")[1] == l:object.pos_start[0]
           \     && getpos("'>")[1] == l:object.pos_end[0])
         call vimtex#pos#set_cursor(vimtex#pos#prev(l:open.lnum, l:open.cnum))
-        let [l:open, l:close] = vimtex#delim#get_surrounding(a:type)
+        let [l:open, l:close] = s:get_surrounding(a:type)
         if empty(l:open) | return {} | endif
         return s:get_sel_delimited(l:open, l:close, a:is_inner)
       endif
@@ -254,7 +261,7 @@ function! s:get_sel_delimited_visual(is_inner, type, startpos) abort " {{{1
   endif
 
   call vimtex#pos#set_cursor(a:startpos)
-  let [l:open, l:close] = vimtex#delim#get_surrounding(a:type)
+  let [l:open, l:close] = s:get_surrounding_or_next(a:type)
   if empty(l:open) | return {} | endif
   let l:object = s:get_sel_delimited(l:open, l:close, a:is_inner)
   if a:is_inner | return l:object | endif
@@ -267,7 +274,7 @@ function! s:get_sel_delimited_visual(is_inner, type, startpos) abort " {{{1
       \     && getpos("'<")[1] == l:object.pos_start[0]
       \     && getpos("'>")[1] == l:object.pos_end[0])
     call vimtex#pos#set_cursor(vimtex#pos#prev(l:open.lnum, l:open.cnum))
-    let [l:open, l:close] = vimtex#delim#get_surrounding(a:type)
+    let [l:open, l:close] = s:get_surrounding(a:type)
     if empty(l:open) | return {} | endif
     return s:get_sel_delimited(l:open, l:close, a:is_inner)
   endif
@@ -459,12 +466,31 @@ endfunction
 
 " }}}1
 
+function! s:get_surrounding_or_next(type) abort " {{{1
+  if a:type ==# 'delims'
+    return vimtex#delim#get_surrounding_or_next('delim_all')
+  else
+    return vimtex#env#get_surrounding_or_next(a:type)
+  endif
+endfunction
+
+" }}}1
+function! s:get_surrounding(type) abort " {{{1
+  if a:type ==# 'delims'
+    return vimtex#delim#get_surrounding('delim_all')
+  else
+    return vimtex#env#get_surrounding(a:type)
+  endif
+endfunction
+
+" }}}1
+
 
 " {{{1 Initialize module
 
 " Pattern to match section/chapter/...
 let s:section_search = '\v%(%(\\@<!%(\\\\)*)@<=\%.*)@<!\s*\\\zs('
-      \ . join([
+      \ .. join([
       \   '%(sub)?paragraph>',
       \   '%(sub)*section>',
       \   'chapter>',
@@ -474,7 +500,8 @@ let s:section_search = '\v%(%(\\@<!%(\\\\)*)@<=\%.*)@<!\s*\\\zs('
       \   'add%(sec|chap|part)>',
       \   '%(begin|end)\{\zsdocument\ze\}'
       \  ], '|')
-      \ .')'
+      \ .. ')'
+      \ .. '|^\s*\% [fF]ake\zs(part|chapter|%(sub)*section)'
 
 " Dictionary to give values to sections in order to compare them
 let s:section_to_val = {

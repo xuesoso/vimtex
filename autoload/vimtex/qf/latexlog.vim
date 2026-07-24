@@ -33,9 +33,13 @@ function! s:qf.set_errorformat() abort dict "{{{1
   setlocal errorformat+=%-P**\"%f\"
 
   " Match errors
+  setlocal errorformat+=%+E!\ Emergency\ stop.
   setlocal errorformat+=%E!\ LaTeX\ %trror:\ %m
+  setlocal errorformat+=%E!pdfTeX\ error:\ %m
+  setlocal errorformat+=%E%f:%l:\ \ ==>\ %m
   setlocal errorformat+=%E%f:%l:\ %m
   setlocal errorformat+=%+ERunaway\ argument?
+  setlocal errorformat+=%-G{/%m
   setlocal errorformat+=%+C{%m
   setlocal errorformat+=%C!\ %m
 
@@ -49,18 +53,23 @@ function! s:qf.set_errorformat() abort dict "{{{1
   " Define general warnings
   "
   setlocal errorformat+=%+WLaTeX\ Font\ Warning:\ %.%#line\ %l%.%#
-  setlocal errorformat+=%-CLaTeX\ Font\ Warning:\ %m
+  setlocal errorformat+=%+WLaTeX\ Font\ Warning:\ %m
+  setlocal errorformat+=%-C(Font)\ %#%m\ on\ input\ line\ %l%.
   setlocal errorformat+=%-C(Font)%m
 
   setlocal errorformat+=%+WLaTeX\ %.%#Warning:\ %.%#line\ %l%.%#
   setlocal errorformat+=%+WLaTeX\ %.%#Warning:\ %m
+  setlocal errorformat+=%-C\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ %m\ on\ input\ line\ %l%.
 
   setlocal errorformat+=%+WOverfull\ %\\%\\hbox%.%#\ at\ lines\ %l--%*\\d
   setlocal errorformat+=%+WOverfull\ %\\%\\hbox%.%#\ at\ line\ %l
   setlocal errorformat+=%+WOverfull\ %\\%\\vbox%.%#\ at\ line\ %l
+  setlocal errorformat+=%+WOverfull\ %\\%\\vbox%.%#\ %m
 
   setlocal errorformat+=%+WUnderfull\ %\\%\\hbox%.%#\ at\ lines\ %l--%*\\d
   setlocal errorformat+=%+WUnderfull\ %\\%\\vbox%.%#\ at\ line\ %l
+
+  setlocal errorformat+=%+WMissing\ character:\ %m
 
   "
   " Define package related warnings
@@ -90,10 +99,15 @@ function! s:qf.set_errorformat() abort dict "{{{1
   setlocal errorformat+=%+WPackage\ titlesec\ Warning:\ %m
   setlocal errorformat+=%-C(titlesec)%m
 
+  setlocal errorformat+=%+WPackage\ silence\ Warning:\ %m
+  setlocal errorformat+=%-C(silence)%m
+
   setlocal errorformat+=%+WPackage\ %.%#\ Warning:\ %m\ on\ input\ line\ %l.
   setlocal errorformat+=%+WPackage\ %.%#\ Warning:\ %m
   setlocal errorformat+=%-Z(%.%#)\ %m\ on\ input\ line\ %l.
   setlocal errorformat+=%-C(%.%#)\ %m
+
+  setlocal errorformat+=%+W%.%#\ Warning:\ %m\ on\ input\ line\ %l.
 
   " Ignore unmatched lines
   setlocal errorformat+=%-G%.%#
@@ -109,38 +123,137 @@ function! s:qf.addqflist(tex, log) abort dict "{{{1
 
   " Apply some post processing of the quickfix list
   let self.main = a:tex
-  let self.root = b:vimtex.root
-  call self.fix_paths()
+  let self.root = fnamemodify(a:tex, ':h')
+  call self.fix_paths(a:log)
 endfunction
 
 " }}}1
-function! s:qf.fix_paths() abort dict " {{{1
+function! s:qf.fix_paths(log) abort dict " {{{1
   let l:qflist = getqflist()
+  let l:lines = readfile(a:log)
+  let l:nlines = len(l:lines)
+  let l:hbox_cache = {'index': {}, 'paths': {}}
 
   for l:qf in l:qflist
-    " For errors and warnings that don't supply a file, the basename of the
-    " main file is used. However, if the working directory is not the root of
-    " the LaTeX project, than this results in bufnr = 0.
+    " Clean up some messages
+    if l:qf.lnum > 0 && l:qf.text =~# 'on input line \d\+.$'
+      let l:qf.text = substitute(l:qf.text, '\s*on input line \d\+.$', '', '')
+    endif
+
+    if l:qf.text ==# '! Emergency stop.'
+      let l:qf.text = 'Emergency stop (fatal error)!'
+    endif
+
+    " Handle missing buffer/filename: Fallback to the main file (this is always
+    " correct in single-file projects and is thus a good fallback).
     if l:qf.bufnr == 0
-      let l:qf.bufnr = bufnr(self.main)
+      let l:bufnr_main = bufnr(self.main)
+      if bufnr(self.main) < 0
+        execute 'badd' self.main
+        let l:bufnr_main = bufnr(self.main)
+      endif
+      let l:qf.bufnr = l:bufnr_main
+    endif
+
+    " Try to parse the filename from logfile for certain errors, except for
+    " large log files where this makes for bad UI because it locks Vim while
+    " waiting for this parsing to finish.
+    if l:nlines < 10000
+          \ && s:fix_paths_hbox_warning(l:qf, l:lines, self.root, l:hbox_cache)
       continue
     endif
 
-    " The buffer names of all file:line type errors are relative to the root of
-    " the main LaTeX file.
-    let l:file = fnamemodify(
-          \ simplify(self.root . '/' . bufname(l:qf.bufnr)), ':.')
-    if !filereadable(l:file) | continue | endif
-
-    if !bufexists(l:file)
-      execute 'badd' l:file
-    endif
-
-    let l:qf.filename = l:file
-    let l:qf.bufnr = bufnr(l:file)
+    " Check and possibly fix invalid file from file:line type entries
+    call s:fix_paths_invalid_bufname(l:qf, self.root)
   endfor
 
   call setqflist(l:qflist, 'r')
+endfunction
+
+" }}}1
+
+function! s:fix_paths_hbox_warning(qf, log, root, cache) abort " {{{1
+  if a:qf.text !~# 'Underfull\|Overfull' | return v:false | endif
+
+  let l:index = index(a:log, a:qf.text)
+  if l:index < 0 | return v:false | endif
+
+  " Check index cache first
+  if has_key(a:cache.index, l:index)
+    if has_key(a:cache.index[l:index], 'bufnr')
+      let a:qf.bufnr = a:cache.index[l:index].bufnr
+    else
+      let a:qf.bufnr = 0
+      let a:qf.filename = a:cache.index[l:index].filename
+    endif
+    return v:true
+  endif
+
+  " Search for a line above the Overflow/Underflow message that specifies the
+  " correct source filename
+  let l:file = ''
+  let l:level = 1
+  for l:lnum in range(l:index - 1, 1, -1)
+    " Check line number cache
+    if has_key(a:cache.paths, l:lnum)
+      let l:file = a:cache.paths[l:lnum]
+      let a:cache.paths[l:index] = l:file
+      break
+    endif
+
+    let l:level += vimtex#util#count(a:log[l:lnum], ')')
+    let l:level -= vimtex#util#count(a:log[l:lnum], '(')
+    if l:lnum < l:index - 1 && l:level > 0 | continue | endif
+
+    let l:file = matchstr(a:log[l:lnum], '\v\(\zs\f+\ze\)?\s*%(\[\d+]?)?$')
+    if !empty(l:file)
+      " Do some simple parsing and cleanup of the filename
+      if !vimtex#paths#is_abs(l:file)
+        let l:file = simplify(a:root . '/' . l:file)
+      endif
+
+      " Store in line number cache
+      let a:cache.paths[l:index] = l:file
+      break
+    endif
+  endfor
+
+  if empty(l:file) || !filereadable(l:file) | return v:false | endif
+
+  let l:bufnr = bufnr(l:file)
+  if l:bufnr > 0
+    let a:qf.bufnr = bufnr(l:file)
+    let a:cache.index[l:index] = {'bufnr': a:qf.bufnr}
+  else
+    let a:qf.bufnr = 0
+    let a:qf.filename = fnamemodify(l:file, ':.')
+    let a:cache.index[l:index] = {'filename': a:qf.filename}
+  endif
+
+  return v:true
+endfunction
+
+" }}}1
+function! s:fix_paths_invalid_bufname(qf, root) abort " {{{1
+  " First check if the entry bufnr is already valid
+  let l:file = getbufinfo(a:qf.bufnr)[0].name
+  if filereadable(l:file) | return | endif
+
+  " The file names of all file:line type entries in the log output are listed
+  " relative to the root of the main LaTeX file. The quickfix mechanism adds
+  " the buffer with the file string. Thus, if the current buffer is not
+  " correct, we can fix by prepending the root to the filename.
+  let l:file = fnamemodify(
+        \ simplify(a:root . '/' . bufname(a:qf.bufnr)), ':.')
+  if !filereadable(l:file) | return | endif
+
+  let l:bufnr = bufnr(l:file)
+  if l:bufnr > 0
+    let a:qf.bufnr = bufnr(l:file)
+  else
+    let a:qf.bufnr = 0
+    let a:qf.filename = l:file
+  endif
 endfunction
 
 " }}}1

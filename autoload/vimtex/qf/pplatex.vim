@@ -43,6 +43,11 @@ function! s:qf.set_errorformat() abort dict "{{{1
   setlocal errorformat+=%W**\ Warning\ in\ %f\\,\ Line\ %l:%m
   setlocal errorformat+=%I**\ BadBox\ \ in\ %f\\,\ Line\ %l:%m
 
+  " Start of new items only line number, message on next line(s).
+  setlocal errorformat+=%E**\ Error\ \ \\,\ Line\ %l:%m
+  setlocal errorformat+=%W**\ Warning\\,\ Line\ %l:%m
+  setlocal errorformat+=%I**\ BadBox\ \\,\ Line\ %l:%m
+
   " Start of items with with file, line and message on the same line. There are
   " no BadBoxes reported this way.
   setlocal errorformat+=%E**\ Error\ \ \ in\ %f\\,\ Line\ %l:%m
@@ -60,6 +65,8 @@ function! s:qf.set_errorformat() abort dict "{{{1
 
   " Undefined reference warnings
   setlocal errorformat+=%W**\ Warning:\ %m\ on\ input\ line\ %#%l.
+  setlocal errorformat+=%W**\ Warning:\ \ %m
+  setlocal errorformat+=%W**\ Warning:\ %m
   setlocal errorformat+=%W**\ Warning:\ 
 
   " Some errors are difficult even for pplatex
@@ -85,9 +92,12 @@ function! s:qf.addqflist(tex, log) abort dict " {{{1
   endif
 
   let l:tmp = fnamemodify(a:log, ':r') . '.pplatex'
-  silent call system(printf('pplatex -i "%s" >"%s"', a:log, l:tmp))
+
+  call vimtex#jobs#run(printf('pplatex -i "%s" >"%s"', a:log, l:tmp))
+  call vimtex#paths#pushd(b:vimtex.root)
   call vimtex#qf#u#caddfile(self, l:tmp)
-  silent call delete(l:tmp)
+  call vimtex#paths#popd()
+  call delete(l:tmp)
 endfunction
 
 " }}}1

@@ -2,6 +2,8 @@ set nocompatible
 let &rtp = '../..,' . &rtp
 filetype plugin on
 
+if !executable('pplatex') | quitall | endif
+
 let g:vimtex_quickfix_method = 'pplatex'
 
 silent edit test-pplatex.tex
@@ -20,6 +22,7 @@ for s:expect in [
       \ {'lnum': 43,  'type': 'W', 'text': "so3_matrix_norm' on page 1 undefined"},
       \ {'lnum': 177, 'type': 'W', 'text': "\nReference `section_model_main' on page 1 undefined"},
       \ {'lnum': 181, 'type': 'W', 'text': "orient_samp' on page 1 undefined"},
+      \ {'lnum': 0,   'type': 'W', 'text': "There were undefined references."},
       \]
   call assert_equal(s:expect.lnum, s:qf[s:n].lnum, 'Failed at index ' . s:n)
   call assert_equal(s:expect.type, s:qf[s:n].type, 'Failed at index ' . s:n)

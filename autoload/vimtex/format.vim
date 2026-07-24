@@ -26,11 +26,7 @@ function! vimtex#format#formatexpr() abort " {{{1
   let l:tries = 5
   let s:textwidth = &l:textwidth == 0 ? 79 : &l:textwidth
 
-  " This is a hack to make undo restore the correct position
-  if mode() !=# 'i'
-    normal! ix
-    normal! x
-  endif
+  call vimtex#util#undostore()
 
   " Main formatting algorithm
   while l:tries > 0
@@ -94,14 +90,14 @@ function! s:format(top, bottom) abort " {{{1
       let l:mark = l:current-1
     endif
 
-    if l:line =~# s:border_end
+    if l:line =~# g:vimtex_format_border_end
       if l:current < l:mark
         let l:bottom += s:format_build_lines(l:current+1, l:mark)
       endif
       let l:mark = l:current
     endif
 
-    if l:line =~# s:border_beginning
+    if l:line =~# g:vimtex_format_border_begin
       if l:current < l:mark
         let l:bottom += s:format_build_lines(l:current, l:mark)
       endif
@@ -142,7 +138,7 @@ function! s:format_build_lines(start, end) abort " {{{1
     if strdisplaywidth(l:word) + strdisplaywidth(l:current) > s:textwidth
       call append(l:lnum, substitute(l:current, '\s$', '', ''))
       let l:lnum += 1
-      let l:current = s:get_indents(VimtexIndent(a:start))
+      let l:current = s:get_indents(indent(a:start))
     endif
     let l:current .= l:word . ' '
   endfor
@@ -187,27 +183,5 @@ function! s:get_indents(number) abort " {{{1
         \ ? repeat("\t", a:number/&l:tabstop)
         \ : repeat(' ', a:number)
 endfunction
-
-" }}}1
-
-
-" {{{1 Initialize module
-
-let s:border_beginning = '\v^\s*%(' . join([
-      \ '\\item',
-      \ '\\begin',
-      \ '\\end',
-      \ '%(\\\[|\$\$)\s*$',
-      \], '|') . ')'
-
-let s:border_end = '\v\\%(' . join([
-      \   '\\\*?',
-      \   'clear%(double)?page',
-      \   'linebreak',
-      \   'new%(line|page)',
-      \   'pagebreak',
-      \   '%(begin|end)\{[^}]*\}',
-      \  ], '|') . ')\s*$'
-      \ . '|^\s*%(\\\]|\$\$)\s*$'
 
 " }}}1

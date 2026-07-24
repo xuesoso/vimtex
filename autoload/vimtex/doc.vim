@@ -12,20 +12,29 @@ endfunction
 
 " }}}1
 
-function! vimtex#doc#package(word) abort " {{{1
-  let l:context = empty(a:word)
+function! vimtex#doc#get_context(...) abort " {{{1
+  let l:word = a:0 > 0 ? a:1 : ''
+  let l:context = empty(l:word)
         \ ? s:packages_get_from_cursor()
         \ : {
         \     'type': 'word',
-        \     'candidates': [a:word],
+        \     'candidates': [l:word],
         \   }
-  if empty(l:context) | return | endif
+  if empty(l:context) | return {} | endif
 
   call s:packages_remove_invalid(l:context)
 
-  for l:handler in g:vimtex_doc_handlers
+  return l:context
+endfunction
+
+" }}}1
+function! vimtex#doc#package(word) abort " {{{1
+  let l:context = vimtex#doc#get_context(a:word)
+  if empty(l:context) | return | endif
+
+  for l:Handler in g:vimtex_doc_handlers
     try
-      if call(l:handler, [l:context]) | return | endif
+      if call(l:Handler, [l:context]) | return | endif
     catch /E117/
     endtry
   endfor
@@ -40,17 +49,30 @@ function! vimtex#doc#make_selection(context) abort " {{{1
   if len(a:context.candidates) == 0
     if exists('a:context.name')
       echohl ErrorMsg
-      echo 'Sorry, no doc for '.a:context.name
+      echo 'Sorry, no doc for ' . a:context.name
       echohl NONE
     endif
     let a:context.selected = ''
     return
   endif
 
-  let a:context.selected = vimtex#ui#choose(a:context.candidates, {
+  if len(a:context.candidates) == 1
+    if !g:vimtex_doc_confirm_single || vimtex#ui#confirm([
+          \ 'Open documentation for ' . a:context.type . ': ',
+          \ ['VimtexSuccess', a:context.candidates[0]],
+          \ '?'
+          \])
+      let a:context.selected = a:context.candidates[0]
+    else
+      let a:context.selected = ''
+    endif
+
+    return
+  endif
+
+  let a:context.selected = vimtex#ui#select(a:context.candidates, {
         \ 'prompt': 'Multiple candidates detected, please select one:',
         \})
-  let a:context.ask_before_open = len(a:context.candidates) == 1
 endfunction
 
 " }}}1
@@ -59,12 +81,14 @@ function! s:packages_get_from_cursor() abort " {{{1
   let l:cmd = vimtex#cmd#get_current()
   if empty(l:cmd) | return {} | endif
 
-  if l:cmd.name ==# '\usepackage'
+  if l:cmd.name ==# '\usepackage' || l:cmd.name ==# '\RequirePackage'
     return s:packages_from_usepackage(l:cmd)
   elseif l:cmd.name ==# '\documentclass'
     return s:packages_from_documentclass(l:cmd)
   elseif l:cmd.name =~# '\v\\%(begin|end)$'
     return s:packages_from_environment(l:cmd)
+  elseif l:cmd.name ==# '\usetikzlibrary'
+    return s:packages_from_usetikzlibrary(l:cmd)
   else
     return s:packages_from_command(strpart(l:cmd.name, 1))
   endif
@@ -84,7 +108,8 @@ function! s:packages_from_usepackage(cmd) abort " {{{1
           \}
 
     let l:cword = expand('<cword>')
-    if len(l:context.candidates) > 1 && index(l:context.candidates, l:cword) >= 0
+    if len(l:context.candidates) > 1
+          \ && index(l:context.candidates, l:cword) >= 0
       let l:context.selected = l:cword
     endif
 
@@ -165,11 +190,50 @@ function! s:packages_from_command(cmd) abort " {{{1
 endfunction
 
 " }}}1
+function! s:packages_from_usetikzlibrary(cmd) abort " {{{1
+  try
+    " Gather and filter candidates
+    let l:candidates = a:cmd.args[0].text
+    let l:candidates = substitute(l:candidates, '\s*', '', 'g')
+    let l:candidates = split(l:candidates, ',')
+    let l:candidates_paths = map(l:candidates, { _, x -> [x,
+          \ vimtex#kpsewhich#find('tikzlibrary' . x . '.code.tex')]})
+    let l:candidates = filter(l:candidates_paths,
+          \ { _, x -> !empty(x[1]) && x[1] !~# 'pgf.*tikz.libraries' })
+    let l:candidates = map(l:candidates, { _, x -> x[0] })
+
+    " Include tikz package itself
+    call insert(l:candidates, 'tikz', 0)
+
+    let l:context = {
+          \ 'type': 'tikzlibrary',
+          \ 'candidates': l:candidates,
+          \}
+
+    " Check selected
+    let l:cword = expand('<cword>')
+    if len(l:context.candidates) > 1
+          \ && index(l:context.candidates, l:cword) >= 0
+      let l:context.selected = l:cword
+    endif
+
+    return l:context
+  catch /'testting/
+    call vimtex#log#warning('Could not parse the package from \usetikzlibrary!')
+    return {}
+  endtry
+endfunction
+
+" }}}1
 
 function! s:packages_remove_invalid(context) abort " {{{1
-  let l:invalid_packages = filter(copy(a:context.candidates), {_, x ->
-        \    empty(vimtex#kpsewhich#find(x . '.sty'))
-        \ && empty(vimtex#kpsewhich#find(x . '.cls'))})
+  if a:context.type !=# 'tikzlibrary'
+    let l:invalid_packages = filter(copy(a:context.candidates), {_, x ->
+          \    empty(vimtex#kpsewhich#find(x . '.sty'))
+          \ && empty(vimtex#kpsewhich#find(x . '.cls'))})
+  else
+    let l:invalid_packages = []
+  endif
 
   call filter(l:invalid_packages, "index(['latex2e', 'lshort'], v:val) < 0")
 
@@ -197,33 +261,13 @@ endfunction
 
 " }}}1
 function! s:packages_open(context) abort " {{{1
-  if !has_key(a:context, 'selected')
-    call vimtex#doc#make_selection(a:context)
-  endif
+  call vimtex#doc#make_selection(a:context)
+  if empty(a:context.selected) | return 0 | endif
 
-  if empty(a:context.selected) | return | endif
-
-  if get(a:context, 'ask_before_open', 1)
-    call vimtex#echo#formatted([
-          \ 'Open documentation for ',
-          \ ['VimtexSuccess', a:context.selected], ' [y/N]? '
-          \])
-
-    let l:choice = nr2char(getchar())
-    if l:choice ==# 'y'
-      echon 'y'
-    else
-      echohl VimtexWarning
-      echon l:choice =~# '\w' ? l:choice : 'N'
-      echohl NONE
-      return
-    endif
-  endif
-
-  call vimtex#util#www('http://texdoc.net/pkg/' . a:context.selected)
+  call vimtex#util#www('http://texdoc.org/pkg/' . a:context.selected)
   redraw!
 endfunction
 
 " }}}1
 
-let s:complete_dir = fnamemodify(expand('<sfile>'), ':h') . '/complete/'
+let s:complete_dir = expand('<sfile>:h') . '/complete/'

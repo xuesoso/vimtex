@@ -214,4 +214,26 @@ this fold worked before issue #1515
   hello world
 \end{frame}
 
+\section{
+  test 4
+}
+
+\section{test 5}
+
+From issue 2771:
+
+\begin{table}[tbp]
+  \caption{Test caption}
+  \label{tab:test}
+  \begin{threeparttable}
+    \begin{tabular}{cc}
+      a & b\tnote{*} \\
+      1 & 2          \\
+    \end{tabular}
+    \begin{tablenotes}
+      \item[*] note 1
+    \end{tablenotes}
+  \end{threeparttable}
+\end{table}
+
 \end{document}

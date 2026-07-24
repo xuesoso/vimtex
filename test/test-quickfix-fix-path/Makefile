@@ -1,9 +1,14 @@
-.PHONY: test
-
-MYVIM ?= nvim --headless
+MYVIM ?= nvim --clean --headless
 
 INMAKE := 1
 export INMAKE
 
-test:
-	@$(MYVIM) -u test.vim
+TESTS := $(wildcard test*.vim)
+TESTS := $(TESTS:.vim=)
+
+.PHONY: default $(TESTS)
+
+default: $(TESTS)
+
+$(TESTS):
+	@$(MYVIM) -u $@.vim
