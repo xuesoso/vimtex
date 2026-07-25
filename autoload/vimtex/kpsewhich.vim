@@ -18,10 +18,14 @@ function! vimtex#kpsewhich#find(file) abort " {{{1
       endif
     endfor
   catch
-    call vimtex#log#error(
-          \ 'Invalid kpsewhich cache!',
-          \ 'Please clear with ":VimtexClearCache kpsewhich"'
-          \)
+    " The cache is in an outdated/invalid format. This happens e.g. when
+    " upgrading from an old VimTeX whose kpsewhich cache stored plain strings
+    " instead of [result, root] pairs. Self-heal by clearing the stale cache so
+    " subsequent lookups rebuild it automatically, instead of failing on every
+    " lookup and nagging the user to clear it by hand. We clear the cache object
+    " directly (rather than via vimtex#cache#clear) to reset its in-memory data
+    " and delete the file without depending on the global cache registry.
+    call l:cache.clear()
     return ''
   endtry
 
